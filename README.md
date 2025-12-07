@@ -20,15 +20,15 @@ The repository is organized into two main stages: a **Data Retrieval Pipeline** 
 ├── data
 │   └── Data_Set_S1.txt             # LabMT sentiment dictionary
 └── network
-    ├── 00_DATA_CLEANING.ipynb              # Pre-processing raw attributes
-    ├── 01_TAXONOMY_DATA_ANALYSIS.ipynb     # Biological hierarchy stats
-    ├── 02_MORPHOLOGICAL_DATA_ANALYSIS.ipynb# Physical trait stats
-    ├── 03_TEXT_ANALYSIS.ipynb              # TF-IDF and content analysis
-    ├── 04_WIKI_LINKS_ANALYSIS.ipynb        # Hyperlink graph construction
-    ├── 05_MAKE_NETWORK.ipynb               # Multilayer network creation
-    ├── 06_GRAPH_ANALYSIS.ipynb             # Centrality & Assortativity
-    ├── 07_SENTIMENT_ANALYSIS.ipynb         # VADER & Word Clouds
-    └── mushroom_network_final.pkl          # Final NetworkX graph object
+    ├── 00_DATA_CLEANING.ipynb               # Pre-processing raw attributes
+    ├── 01_TAXONOMY_DATA_ANALYSIS.ipynb      # Biological hierarchy stats
+    ├── 02_MORPHOLOGICAL_DATA_ANALYSIS.ipynb # Physical trait stats
+    ├── 03_TEXT_ANALYSIS.ipynb               # TF-IDF and content analysis
+    ├── 04_WIKI_LINKS_ANALYSIS.ipynb         # Hyperlink graph construction
+    ├── 05_MAKE_NETWORK.ipynb                # Multilayer network creation
+    ├── 06_GRAPH_ANALYSIS.ipynb              # Centrality & Assortativity
+    ├── 07_SENTIMENT_ANALYSIS.ipynb          # VADER & Word Clouds
+    └── mushroom_network_final.pkl           # Final NetworkX graph object
 
 ```
 ---
@@ -38,55 +38,59 @@ The repository is organized into two main stages: a **Data Retrieval Pipeline** 
 This section explains the data collection workflow and why each step is structured the way it is. The retrieval pipeline is split into five focused scripts, each handling a single responsibility. This improves clarity, reduces coupling across stages, and makes debugging straightforward.
 
 #### 1.1 Collecting the list of mushrooms  
-**File: `01_mushroom_list.py`** :contentReference[oaicite:0]{index=0}  
-Key points  
+**File: `01_mushroom_list.py`** 
+
+##### Key points  
 - Queries Wikidata with a SPARQL request to retrieve all items tagged with any mushroom related property (P783 to P789).  
 - Extracts each item's English Wikipedia article URL.  
 - Stores a clean list containing a unique id, the mushroom name, and its article link.  
-Reasoning  
+##### Reasoning  
 - Wikidata provides a consistent and queryable source of structured biological entities, which ensures reproducibility and avoids manual curation.  
 - Filtering for items that actually have an English Wikipedia article keeps the dataset aligned with downstream processing requirements.
 
 #### 1.2 Retrieving pageview statistics  
-**File: `02_extract_num_views.py`** :contentReference[oaicite:1]{index=1}  
-Key points  
+**File: `02_extract_num_views.py`**
+
+##### Key points  
 - Loads the initial mushroom list and fetches monthly pageview data from the Wikimedia REST API.  
 - Aggregates total views across the entire available time range.  
 - Handles skipped or invalid pages gracefully and introduces a delay between requests to respect API limits.  
-Reasoning  
+##### Reasoning  
 - Pageviews act as a useful proxy for cultural or scientific interest.  
 - Computing totals locally avoids repeated on the fly API calls, improving performance and stability in later analyses.
 
 #### 1.3 Downloading article HTML  
-**File: `03_download_wiki_html.py`** :contentReference[oaicite:2]{index=2}  
-Key points  
+**File: `03_download_wiki_html.py`**
+
+##### Key points 
 - Reads the article list and extracts each page title.  
 - Uses the MediaWiki API `parse` endpoint to download fully rendered HTML for each article.  
 - Saves each article as a standalone HTML file in a persistent directory.  
-Reasoning  
+##### Reasoning  
 - Local HTML snapshots guarantee reproducibility, especially since Wikipedia content can change over time.  
 - Using rendered HTML instead of raw wikitext simplifies parsing and reduces the need for custom markup handling.
 
 #### 1.4 Parsing biological and morphological information  
-**File: `04_parse_html.py`** :contentReference[oaicite:3]{index=3}  
-Key points  
+**File: `04_parse_html.py`**
+
+##### Key points 
 - Parses each saved HTML file with BeautifulSoup.  
 - Extracts structured taxonomic info from the Speciesbox, morphological traits from the Mycomorphobox, text content, and all internal wiki links.  
 - Normalizes common patterns and handles variation across article formats.  
-Reasoning  
+##### Reasoning  
 - Wikipedia infoboxes are semi structured but inconsistent. A dedicated parser allows robust extraction while adapting to layout differences.  
 - Storing multiple layers of information supports richer downstream tasks like classification, clustering, and link network analysis.
 
 #### 1.5 Merging all datasets  
-**File: `05_merge_datasets.py`** :contentReference[oaicite:4]{index=4}  
-Key points  
+**File: `05_merge_datasets.py`**
+
+##### Key points 
 - Loads the original list, the pageview dataset, and the parsed attribute dataset.  
 - Merges them using article URLs and mushroom names as lookup keys.  
 - Produces a single consolidated JSON file containing all fields.  
-Reasoning  
+##### Reasoning  
 - A unified dataset is essential for efficient analysis and avoids repeated cross referencing.  
 - Using article links and names as keys ensures reliable alignment even when ordering differs across intermediate files.
-
 
 ---
 
@@ -97,56 +101,82 @@ This section outlines how the dataset is cleaned before any network construction
 ## 2.1 Attribute specific cleaning
 
 #### Spore print color
-Operations  
+
+##### Operations  
+
 - remove fixed prefixes and newline characters  
-- split into individual color tokens  
-Reason  
+- split into individual color tokens
+
+##### Reason  
+
 - Spore print color often contains ranges or compound expressions. Splitting ensures each color can be treated independently in similarity comparisons.
 
 #### Cap shape
-Operations  
+
+##### Operations  
+
 - remove prefixes like "Cap is"  
 - remove filler words such as "or"  
-- split into token lists  
-Reason  
+- split into token lists
+  
+##### Reason  
+
 - Cap shape is frequently expressed as alternatives or ranges. The goal is to encode each shape as a discrete value.
 
 #### Stipe character
-Operations  
+
+##### Operations  
+
 - remove several template phrases ("Stipe is", "Stipe has a")  
 - remove negations or ambiguous constructions  
 - remove text after expressions like "Lacks a"  
-- split into tokens  
-Reason  
+- split into tokens
+  
+##### Reason  
+
 - Stipe descriptions vary more than other fields and contain many narrative phrases. Filtering produces a clean list of structural descriptors.
 
 #### Hymenium type
-Operations  
+
+##### Operations 
+
 - remove boilerplate prefixes  
 - remove problematic infobox fragments that appear in certain pages  
 - remove "or"  
-- split into tokens  
-Reason  
+- split into tokens
+  
+##### Reason 
+
 - Hymenium type must be reduced to standard categorical labels without leftover template text.
 
 #### Edibility
-Operations  
+
+##### Operations  
+
 - normalize keywords such as edible, poisonous, psychoactive  
 - remove phrases such as "can cause..."  
 - convert special cases to underscore tokens like `not_recommended`  
 - remove "but" and "or"  
-- split into tokens  
-Reason  
+- split into tokens
+  
+##### Reason  
+
 - Edibility is often embedded in long sentences with mixed information. Standardized tokens allow direct comparison and later classification.
 
 #### Gill type
-Operations  
+
+##### Operations  
+
 - wrap the single value into a one element list  
-Reason  
+
+##### Reason  
+
 - Gill type is usually a single descriptor. Converting to a list maintains uniform structure across all attributes.
 
 #### Ecological type
-Operations  
+
+##### Operations  
+
 - remove "Ecology is"  
 - remove "or"  
 - split into tokens  
@@ -154,14 +184,20 @@ Reason
 - Ecology is sometimes written as a sentence or with multiple alternatives. Cleaning isolates the specific ecological categories.
 
 #### Conservation status
-Operations  
+
+##### Operations 
+
 - convert missing values to empty lists  
 - split values using the same tokenization pattern  
-Reason  
+
+##### Reason  
+
 - Status information may contain multiple indicators. Converting to a standardized list ensures consistency for downstream grouping.
 
 ## 2.3 Result
-After cleaning  
+
+##### After cleaning  
+
 - all morphology and status fields are stored as lists  
 - narrative sentences are removed  
 - missing values are consistently represented  
@@ -176,56 +212,84 @@ This section introduces the analytical workflows used to study the cleaned datas
 ## 3.1 Taxonomy Analysis
 
 ### Dataset preparation
-Steps  
+
+##### Steps  
+
 - Load the mushroom network and convert all node attributes into a dataframe.  
 - Remove entries missing a Species label, since taxonomy based grouping is impossible without it.  
 - Ensure `views_all_time` is numeric, filling missing values with zero.  
-Reason  
+
+##### Reason  
+
 - A consistent dataframe is required for rank based comparisons and aggregation.
 
 ### Taxonomic richness
-Procedure  
+
+##### Procedure  
+
 - Define hierarchical ranks from Division to Species.  
 - Count the number of unique values for each rank.  
-Purpose  
+
+##### Purpose  
+
 - Quantifies how biologically diverse the dataset is at each level.  
 - Helps identify which layers are species rich or species poor.
 
 ### Family representation
-Procedure  
+
+##### Procedure  
+
 - Count species per Family and list the ten most represented families.  
-Purpose  
+
+##### Purpose 
+
 - Highlights dominant branches in the dataset and serves as a simple proxy for structural imbalance within the taxonomy.
 
 ### Popularity distribution
-Procedure  
+
+##### Procedure
+
 - Plot a histogram of total pageviews across species using a logarithmic y scale.  
-Purpose  
+
+##### Purpose  
+
 - Popularity is highly skewed. The log scale reveals whether many species get minimal attention while a few attract heavy traffic.
 
 ### Average popularity by rank
-Procedure  
+
+##### Procedure  
+
 - Compute the mean pageviews for each unique value in every rank.  
 - Plot the top categories per rank.  
-Purpose  
+
+##### Purpose  
+
 - Identifies which divisions, classes, families, etc., contain disproportionately popular species.  
 - Helps evaluate whether popularity is concentrated within specific evolutionary lineages.
 
 ### Popularity inequality (Gini analysis)
-Procedure  
+
+##### Procedure  
+
 - Use a custom Gini function to quantify inequality in total pageviews within each taxonomic rank.  
 - Group species by rank, sum their views, and compute Gini coefficients.  
-Purpose  
+
+##### Purpose  
+
 - Measures how unevenly attention is distributed among branches of the tree of life.  
 - A high Gini score means a small subset of groups attracts nearly all attention.  
 - Comparing ranks shows whether inequality persists across taxonomic scales.
 
 ### Pareto style popularity check
-Procedure  
+
+##### Procedure  
+
 - Sort species by pageviews.  
 - Compute cumulative view percentages.  
-- Estimate how many species account for 10 percent, 20 percent, and 50 percent of total traffic.  
-Purpose  
+- Estimate how many species account for 10 percent, 20 percent, and 50 percent of total traffic.
+
+##### Purpose  
+
 - Evaluates how extreme the popularity concentration is.  
 - Provides intuitive interpretations such as how many species drive half of all Wikipedia interest.
 
@@ -234,45 +298,65 @@ Purpose
 ## 3.2 Morphology Analysis
 
 ### Dataset preparation
-Steps  
+
+##### Steps  
+
 - Load the mushroom network and convert node attributes into a dataframe.  
-- Extract the eight morphological traits stored as list formatted fields.  
-Reason  
+- Extract the eight morphological traits stored as list formatted fields.
+  
+##### Reason
+
 - Morphology cannot be analyzed in its list form until exploded into individual tokens.
 
 ### Morphological richness
-Procedure  
+
+##### Procedure  
+
 - Explode each morphological attribute into one row per trait value.  
-- Count unique tokens for each attribute.  
-Purpose  
+- Count unique tokens for each attribute.
+
+##### Purpose  
+
 - Quantifies the diversity of morphological descriptors present in the dataset.  
 - Identifies attributes with highly varied or very narrow category sets.
 
 ### Preliminary popularity analysis
-Procedure  
+
+##### Procedure  
+
 - Explode each morphological attribute and link individual trait values to species level pageviews.  
 - Remove empty tokens coming from missing or cleaned fields.  
 - Group by trait value and compute mean views and number of species expressing that trait.  
 - Filter out rare categories with low sample counts to avoid misleading spikes.  
 - Plot trait value popularity using bar charts.  
-Purpose  
+
+##### Purpose  
+
 - Tests whether specific morphological features correspond to higher public interest.  
 - Ensures comparisons are not dominated by noisy or sparse categories.
 
 ### Popularity inequality (Gini analysis)
-Procedure  
+
+##### Procedure  
+
 - For each attribute, explode all values and sum pageviews per trait category.  
-- Compute the Gini coefficient on the resulting distribution.  
-Purpose  
+- Compute the Gini coefficient on the resulting distribution.
+  
+##### Purpose  
+
 - Measures how unequal popularity is within each morphological attribute.  
 - High Gini values indicate that one or a few morphological categories dominate attention.
 
 ### High resolution trait analysis
-Procedure  
+
+##### Procedure  
+
 - Compute mean, standard deviation, count, and confidence intervals for each morphological trait value.  
 - Select the top categories with strongest popularity signals.  
 - Plot bar charts with error bars, sample size labels, and Gini scores for context.  
-Purpose  
+
+##### Purpose  
+
 - Produces a clearer and statistically informed comparison of trait level popularity.  
 - Reveals whether differences are broad trends or driven by a small number of species.
 
@@ -281,60 +365,88 @@ Purpose
 ## 3.3 Text Analysis
 
 ### Dataset preparation  
-Steps  
+
+##### Steps  
+
 - Load the mushroom network and convert node attributes into a dataframe.  
 - Extract the raw article text and create a cleaned version.  
-Reason  
+
+##### Reason  
+
 - Wikipedia text contains references, boilerplate phrases, and formatting noise. Cleaning is needed before any linguistic analysis.
 
 ### Text cleaning and word count  
-Procedure  
+
+##### Procedure  
+
 - Remove citation markers and stub templates.  
 - Normalize whitespace and strip artifacts.  
 - Compute article length by counting words in the cleaned text.  
-Purpose  
+
+##### Purpose  
+
 - Produces a consistent corpus for analysis.  
 - Word count offers a simple measure of article completeness.
 
 ### Length versus popularity  
-Procedure  
+
+##### Procedure  
+
 - Plot word count against total pageviews using log-log scales.  
-- Fit a trend line and compute the Spearman correlation.  
-Purpose  
+- Fit a trend line and compute the Spearman correlation.
+  
+##### Purpose  
+
 - Tests whether longer articles attract more attention.  
 - Log scaling allows heavy tailed patterns to be seen more clearly.
 
 ### TF-IDF keyword extraction  
-Procedure  
+
+##### Procedure  
+
 - Build a TF-IDF model using custom stopwords to remove Wikipedia boilerplate and generic biological vocabulary.  
 - Ignore extremely common or extremely rare words using document frequency thresholds.  
 - Extract top TF-IDF terms for the three most popular mushrooms.  
-Purpose  
+
+##### Purpose 
+
 - Identifies distinctive vocabulary associated with high visibility species.  
 - Highlights specific ecological, chemical, or morphological themes that contribute to popularity.
 
 ### Semantic similarity between species  
-Procedure  
+
+##### Procedure  
+
 - Compute a cosine similarity matrix using TF-IDF vectors.  
 - Inspect pairwise similarity and visualize the distribution of similarity scores.  
-Purpose  
+
+##### Purpose  
+
 - Measures how similar species are in textual descriptions.  
 - Helps assess whether mushrooms cluster semantically in ways not captured by taxonomy or morphology.
 
 ### Word cloud of the top species  
-Procedure  
+
+##### Procedure  
+
 - Select the top fifty most viewed species.  
 - Combine their cleaned texts into a single corpus.  
-- Generate a word cloud using the extended stopword list.  
-Purpose  
+- Generate a word cloud using the extended stopword list.
+  
+##### Purpose  
+
 - Provides an intuitive overview of terms most associated with the most culturally visible mushrooms.  
 - Suppresses trivial biological vocabulary to reveal more meaningful concepts.
 
 ### Similarity distribution analysis  
-Procedure  
+
+##### Procedure  
+
 - Plot the histogram of pairwise cosine similarity values.  
 - Summarize similarity counts within fixed intervals.  
-Purpose  
+
+##### Purpose  
+
 - Shows whether textual descriptions tend to be unique or homogeneous.  
 - Indicates how much semantic redundancy or diversity exists across species.
 
@@ -343,43 +455,63 @@ Purpose
 ## 3.4 Wikipedia Links Analysis
 
 ### Dataset preparation  
-Steps  
+
+##### Steps  
+
 - Load the mushroom network and convert node attributes into a dataframe.  
 - Extract each species' list of outgoing Wikipedia links.  
-Reason  
+
+##### Reason  
+
 - Link structure provides relational information not captured by taxonomy, morphology, or text.  
 - Wikipedia hyperlinks can reveal conceptual proximity and shared contexts between species.
 
 ### Link preprocessing  
-Procedure  
+
+##### Procedure  
+
 - Ensure the `wikilinks` field is interpreted as a list of dictionaries rather than a raw string.  
 - Convert any serialized list representations back into proper Python objects.  
-Purpose  
+
+##### Purpose  
+
 - Prevents malformed link entries from being treated as text.  
 - Ensures downstream filtering and graph construction behave correctly.
 
 ### Filtering for in-dataset links  
-Procedure  
+
+##### Procedure  
+
 - Build a set of valid article URLs belonging to mushrooms in the dataset.  
 - Map article URLs to mushroom names for readable node labels.  
-- Retain only edges in which both the source and target URLs correspond to mushrooms in the final dataset.  
-Purpose  
+- Retain only edges in which both the source and target URLs correspond to mushrooms in the final dataset.
+  
+##### Purpose  
+
 - Restricts the network to internal mushroom to mushroom links.  
 - Prevents dilution of the graph with irrelevant pages such as geographic regions, chemicals, or general biology articles.
 
 ### Graph construction  
-Procedure  
+
+##### Procedure  
+
 - Add all mushrooms as nodes, even if they have no internal links.  
 - Add undirected edges between two mushrooms whenever one links to the other.  
-- Remove self links where a page links to itself.  
-Purpose  
+- Remove self links where a page links to itself.
+  
+##### Purpose  
+
 - Builds a clean hyperlink graph capturing how fungal species reference one another.  
 - Retains information about isolated nodes, which may indicate rare or poorly connected species.
 
 ### Degree distribution analysis  
-Procedure  
+
+##### Procedure  
+
 - Compute the degree of each node and visualize their distribution.  
-Purpose  
+
+##### Purpose  
+
 - Reveals whether the hyperlink network is highly centralized or broadly connected.  
 - Identifies whether a small subset of species act as hubs in the Wikipedia ecosystem.
 
@@ -388,81 +520,117 @@ Purpose
 ## 3.5 Network Construction
 
 ### Dataset preparation  
-Steps  
+
+##### Steps  
+
 - Load the cleaned mushroom dataset and convert all node attributes into a dataframe.  
 - Define attribute groups for taxonomy, morphology, text, and wikilinks.  
-Reason  
+
+##### Reason  
+
 - A consistent attribute layout is required to compute similarity matrices for each layer.
 
 ### Taxonomic network  
-Procedure  
+
+##### Procedure  
+
 - One hot encode Genus, Family, and Order.  
 - Compute pairwise similarity using weighted hierarchical overlap, giving highest weight to Genus matches, lower to Family, and lowest to Order.  
 - Normalize scores and remove trivial self matches.  
 - Add edges only for pairs exceeding a similarity threshold.  
-Purpose  
+
+##### Purpose  
+
 - Captures graded biological relatedness.  
 - Prevents overconnection by ignoring overly broad ranks.
 
 ### Morphological network  
-Procedure  
+
+##### Procedure  
+
 - Use previously computed Gini coefficients as weights to scale each morphological attribute by its informational value.  
 - Convert list based attributes into binary matrices using multilabel encoding.  
 - Compute cosine similarity per trait and form a weighted average similarity matrix.  
 - Normalize and threshold to generate edges.  
-Purpose  
+
+##### Purpose 
+
 - Models resemblance based on structural and ecological traits.  
 - Ensures influential traits contribute more strongly than low variance traits.
 
 ### Text network  
-Procedure  
+
+##### Procedure  
+
 - Clean article text and compile an expanded stopword list including taxonomy names, morphology terms, geographic words, and general fillers.  
 - Fit a TF IDF model and compute cosine similarity between articles.  
 - Zero out self similarity and prune extremely high similarity pairs caused by boilerplate stubs.  
 - Add edges for pairs exceeding a semantic similarity threshold.  
-Purpose  
+
+##### Purpose  
+
 - Captures contextual and cultural similarity between species.  
 - Adds information unavailable to biological and morphological layers.
 
 ### Wikipedia links network  
-Procedure  
+
+##### Procedure
+
 - Parse external wikilinks and convert serialized lists into proper Python objects.  
 - Retain only links whose targets are mushrooms within the dataset.  
 - Build an undirected graph and corresponding adjacency matrix.  
-Purpose  
+
+##### Purpose  
+
 - Encodes explicit connections created by Wikipedia editors.  
 - Reflects structural proximity derived from hyperlink behavior.
 
 ### Composite similarity matrix  
-Procedure  
+
+##### Procedure  
+
 - Combine the raw similarity matrices from taxonomy, morphology, text, and wikilinks using predefined weights.  
 - Zero the diagonal and preserve all pairwise similarity values.  
-Purpose  
+
+##### Purpose  
+
 - Produces an integrated similarity representation that blends biological, descriptive, and hyperlink based signals.
 
 ### k nearest neighbor backbone  
-Procedure  
+
+##### Procedure  
+
 - For each species, identify the top k similar neighbors from the composite matrix.  
 - Add edges to form a sparse backbone graph that retains only the strongest connections.  
-Purpose  
+
+##### Purpose  
+
 - Removes noise and reduces density while preserving core structural relationships.  
 - Produces a clearer network suitable for global clustering.
 
 ### Community detection  
-Procedure  
+
+##### Procedure  
+
 - Apply Louvain clustering across multiple resolution values.  
 - Select the partition with highest modularity.  
 - Assign community labels and summarize each group by dominant Family and average popularity.  
-Purpose  
+
+##### Purpose  
+
 - Reveals emergent clusters produced by all similarity layers combined.  
 - Provides interpretable groupings grounded in both biological and contextual features.
 
 ### Visualization  
-Procedure  
+
+##### Procedure  
+
 - Compute a forceatlas2 layout with strong repulsion to separate clusters.  
 - Size nodes by log scaled pageviews and color by community membership.  
 - Add rich hover text containing taxonomy, morphology, and popularity information.  
-Purpose  
+
+##### Purpose  
+
 - Produces an interpretable visual summary of the complete multilayer network.  
 - Highlights hubs, cluster boundaries, and structural patterns across the dataset.
 
@@ -477,31 +645,43 @@ This section details the structural analysis of the constructed mushroom network
 - Loads the finalized `mushroom_network_final.pkl` containing all nodes and edges.  
 - Computes three distinct centrality metrics for every node: Degree Centrality, PageRank, and Betweenness Centrality.  
 - Merges these structural metrics with the views attribute into a unified analysis dataframe.  
-Reasoning  
+
+##### Reasoning  
+
 - Centrality metrics quantify "importance" in different ways. A mushroom might have few links but be crucial for connecting two different families.  
 - Pre-calculating these metrics allows for rapid correlation testing against pageviews without re-running expensive graph algorithms.
 
 ### 4.2 Popularity vs. Structure Correlation
-Procedure  
+
+##### Procedure  
+
 - Log-transforms the view counts to handle the heavy-tailed distribution of popularity.  
 - Calculates Spearman rank correlations between popularity and the three centrality metrics.  
 - Visualizes these relationships using scatter plots with regression lines and outlier labeling.  
-Purpose  
+
+##### Purpose  
+
 - Tests the hypothesis that well-linked articles are viewed more often.  
 - Identifying "Hidden Gems" reveals species that are structurally central to the network but under-appreciated by the public.
 
 ### 4.3 Popularity Inequality and Assortativity
-Procedure  
+
+##### Procedure  
+
 - Ranks nodes by both Pageviews and PageRank to identify discrepancies (Hidden Gems vs. Pop Stars).  
 - Calculates neighbor popularity: For every node, compute the average view count of its immediate network neighbors.  
 - Plots node popularity against neighbor popularity on a log-log scale.  
 - Overlays community IDs as colors to detect cluster-specific behavior.  
-Purpose  
+
+##### Purpose 
+
 - Analyzes "assortative mixing," determining if popular mushrooms tend to link primarily to other popular mushrooms.  
 - Helps visualize if high-traffic pages form isolated "echo chambers" or if popularity is distributed across the network structure.
 
 ### 4.4 Result
-After analysis  
+
+##### After analysis  
+
 - Structural hubs are compared against cultural popularity.  
 - The degree of "contagion" (popularity assortativity) is quantified.  
 - Clusters are evaluated to see if they are defined by high-traffic hubs or niche scientific groupings.
@@ -519,41 +699,56 @@ This section investigates the contextual content of the network. While the graph
   - Standard English stopwords.
   - Domain-specific terms (e.g., "mushroom", "fungus", "spore", "gill", "cm").
   - **Dynamic Exclusion:** Iterates through every Taxonomy and Morphology column in the dataframe to add specific mushroom names (e.g., "Amanita", "muscaria") to the ignore list.  
-Reasoning  
+##### Reasoning  
+
 - Wikipedia articles mention the subject's name frequently. To analyze the *description* rather than the *identity*, we must strip out the mushroom's own name.  
 - Removing generic biological terms prevents every word cloud from being dominated by words like "species" or "cap."
 
 ## 5.2 Comparative Word Clouds
-Key points  
+
+##### Key points  
+
 - Selects two distinct communities: The "Amanita Cluster" and the "Psychonaut Cluster."  
 - Generates word clouds using custom image masks (shapes of mushrooms) for visual distinctness.  
 - Uses the strict stopword list to ensure only descriptive adjectives and nouns remain.  
-Reasoning  
+
+##### Reasoning  
+
 - Provides a qualitative sanity check for the clustering.  
 - Visualizes the semantic gap: One cluster might feature words like "deadly" and "poison," while another features "psychoactive" and "legal."
 
 ## 5.3 Keyword Sentiment (LabMT)
-Key points  
+
+##### Key points  
+
 - Uses the LabMT (Language Assessment by Mechanical Turk) dictionary, which scores words on a happiness scale.  
 - Extracts the top 50 most frequent words for each community.  
 - Calculates the average sentiment score of these *specific keywords* only.  
-Reasoning  
+
+##### Reasoning  
+
 - Analyzing the "core vocabulary" helps bypass the neutral "encyclopedic tone" of Wikipedia.  
 - If the most frequent words in a cluster are "toxin," "fatal," and "liver," the cluster will score negatively even if the sentence structure is neutral.
 
 We found that the LabMT method did not work well on the mushroom articles. So we decided to go with another sentiment approach, the VADER (Valence Aware Dictionary and sEntiment Reasoner).
 
 ## 5.4 Full-Text Sentiment (VADER)
-Key points  
+
+##### Key points  
+
 - Initializes the VADER (Valence Aware Dictionary and sEntiment Reasoner) analyzer.  
 - Computes a compound sentiment score (-1 to +1) for the *entire* text of every article.  
 - Aggregates the mean sentiment score per community.  
-Reasoning  
+
+##### Reasoning  
+
 - VADER is sensitive to intensity and context, capturing a different layer of sentiment than the keyword approach.  
 - It tests the hypothesis: Are articles about edible mushrooms written more "positively" than articles about poisonous ones?
 
 ## 5.5 Sentiment Visualization
-Key points  
+
+##### Key points  
+
 - Aggregates sentiment scores, view counts, and dominant families.  
 - Visualization: Creates a **Lollipop Chart** ranking communities from most negative (Red) to most positive (Green).  
 - Highlights which fungal families are associated with negative vocabulary vs. positive vocabulary.  
